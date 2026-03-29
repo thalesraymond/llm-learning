@@ -1,4 +1,5 @@
 import os
+import sys
 from dotenv import load_dotenv
 from google import genai
 import argparse
@@ -9,20 +10,33 @@ from call_function import available_functions, call_function
 
 def main():
     args = parse_input()
-    # Now we can access `args.user_prompt`
-
     messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
+
     for _ in range(20):
         result = gemini_api_call(messages)
+
         if not result.candidates:
             print("No candidates returned from Gemini API.")
-            return
-        
-        messages.extend(result.candidates)
+            return 1
 
-    print_results(messages, result, args.verbose)
-    
-    messages[0].parts
+        for candidate in result.candidates:
+            if candidate.content:
+                messages.append(candidate.content)
+
+        if args.verbose:
+            messages_texts = [part.text for message in messages for part in message.parts if getattr(part, "text", None)]
+            handle_metadata(result, args.verbose, messages_texts)
+
+        function_responses = handle_functions_calls(result, args.verbose)
+        if function_responses:
+            messages.append(types.Content(role="user", parts=function_responses))
+            continue
+
+        handle_response(result)
+        return 0
+
+    print("Reached max iterations (20) without a final response.")
+    return 1
 
 def parse_input():
     parser = argparse.ArgumentParser(description="Chatbot")
@@ -50,17 +64,6 @@ def gemini_api_call(messages):
     
     return result
 
-def print_results(messages, gemini_result, verbose=False):
-    messages_texts = [part.text for message in messages for part in message.parts]
-
-    handle_metadata(gemini_result, verbose, messages_texts)
-
-    handle_functions_calls(gemini_result, verbose, messages)
-        
-    handle_response(gemini_result)
-    
-    
-
 def handle_response(gemini_result):
     if not gemini_result.text:
         return
@@ -79,9 +82,11 @@ def handle_metadata(gemini_result, verbose, messages_texts):
     
     
 
-def handle_functions_calls(gemini_result, verbose, messages=[]):
+def handle_functions_calls(gemini_result, verbose):
     function_results_parts = []
-    for function_call in gemini_result.function_calls:
+    function_calls = gemini_result.function_calls or []
+
+    for function_call in function_calls:
         print(f"Calling function: {function_call.name}({function_call.args})")
         call_function_result = call_function(function_call, verbose)
         
@@ -97,11 +102,9 @@ def handle_functions_calls(gemini_result, verbose, messages=[]):
         
         if verbose:
             print(f"-> {call_function_result.parts[0].function_response.response}")
-            
-    messages.append(types.Content(role="user", parts=function_results_parts))
-            
+
     return function_results_parts
         
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
