@@ -1,5 +1,6 @@
 import os
 import subprocess
+from google.genai import types
 
 from functions.path_validation import validate_path_within_working_directory
 
@@ -39,3 +40,23 @@ def run_python_file(working_directory, file_path, args=None):
     return result_text
   except Exception as e:
     return print(f"Error: {e}")
+
+
+schema_run_python_file = types.FunctionDeclaration(
+  name="run_python_file",
+  description="Executes a Python file relative to the working directory and returns its stdout and stderr output",
+  parameters=types.Schema(
+    type=types.Type.OBJECT,
+    properties={
+      "file_path": types.Schema(
+        type=types.Type.STRING,
+        description="Path to the Python file to execute, relative to the working directory",
+      ),
+      "args": types.Schema(
+        type=types.Type.ARRAY,
+        description="Optional command-line arguments passed to the Python file",
+        items=types.Schema(type=types.Type.STRING),
+      ),
+    },
+  ),
+)
